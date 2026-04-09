@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Gerenciar Notebooks{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-plus-circle"></i> Novo Notebook</h5>
+                <form method="POST" action="{{ url_for('novo_notebook') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Nome *</label>
+                        <input type="text" name="nome" class="form-control" placeholder="Ex: Notebook Dell #1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Localização Atual</label>
+                        <input type="text" name="localizacao" class="form-control" placeholder="Ex: Sala 2, Armário TI">
+                    </div>
+                    <button class="btn btn-primary w-100">Cadastrar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-laptop"></i> Notebooks ({{ notebooks|length }})</h5>
+                {% if notebooks %}
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Nome</th><th>Localização</th><th>Responsável</th><th></th></tr></thead>
+                    <tbody>
+                    {% for nb in notebooks %}
+                    <tr>
+                        <td><strong>{{ nb.nome }}</strong></td>
+                        <td><span class="badge bg-success">{{ nb.localizacao }}</span></td>
+                        <td>{{ nb.responsavel or '-' }}</td>
+                        <td>
+                            <div class="d-flex gap-1 justify-content-end">
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                                        data-bs-target="#mover{{ nb.id }}" title="Mover">
+                                    <i class="bi bi-arrow-right-circle"></i>
+                                </button>
+                                <a href="{{ url_for('historico_notebook', nb_id=nb.id) }}"
+                                   class="btn btn-sm btn-outline-secondary" title="Histórico">
+                                    <i class="bi bi-clock-history"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('excluir_notebook', nb_id=nb.id) }}"
+                                      onsubmit="return confirm('Excluir {{ nb.nome }}?')">
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Modal Mover -->
+                    <div class="modal fade" id="mover{{ nb.id }}" tabindex="-1">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <form method="POST" action="{{ url_for('mover_notebook', nb_id=nb.id) }}">
+                                    <div class="modal-body p-4">
+                                        <h5>Mover {{ nb.nome }}</h5>
+                                        <p class="text-muted">Atual: <strong>{{ nb.localizacao }}</strong></p>
+                                        <div class="mb-3">
+                                            <label class="form-label">Nova Localização *</label>
+                                            <input type="text" name="localizacao" class="form-control"
+                                                   placeholder="Ex: Sala 3, Mesa do João" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Quem está movendo</label>
+                                            <input type="text" name="responsavel" class="form-control" placeholder="Seu nome">
+                                        </div>
+                                        <button class="btn btn-primary w-100 mb-2">Mover</button>
+                                        <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Cancelar</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted text-center py-3 mb-0">Nenhum notebook cadastrado.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Controle de Salas e Notebooks{% endblock %}</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/fantin-favicon.png') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background: #f0f2f5; }
+        .navbar { background: linear-gradient(135deg, #1a73e8, #0d47a1) !important; }
+        .card { border: none; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+
+        .sala-card {
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            transition: transform 0.2s;
+            cursor: pointer;
+            min-height: 220px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .sala-card:hover { transform: scale(1.03); }
+        .sala-livre {
+            background: linear-gradient(135deg, #43a047, #66bb6a);
+            color: white;
+            box-shadow: 0 3px 14px rgba(67,160,71,0.3);
+        }
+        .sala-ocupada {
+            background: linear-gradient(135deg, #e53935, #ef5350);
+            color: white;
+            box-shadow: 0 3px 14px rgba(229,57,53,0.3);
+        }
+        .sala-proxima {
+            background: linear-gradient(135deg, #f9a825, #fdd835);
+            color: #333;
+            box-shadow: 0 3px 14px rgba(249,168,37,0.3);
+        }
+        .sala-card h5 { font-weight: 700; margin-bottom: 4px; font-size: 1rem; }
+        .sala-status { font-size: 1.6rem; margin-bottom: 4px; }
+
+        .nb-card {
+            border-radius: 12px;
+            padding: 14px;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+            text-align: center;
+            transition: transform 0.2s;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .nb-card:hover { transform: scale(1.03); }
+        .nb-drag { cursor: grab; }
+        .nb-drag:active { cursor: grabbing; }
+        .nb-in-sala { font-size: 0.7rem; cursor: grab; padding: 4px 8px; max-width: 100%; word-break: break-word; white-space: normal; display: inline-block; text-align: left; }
+
+        .flash-container { position: fixed; top: 70px; right: 20px; z-index: 9999; min-width: 300px; }
+        .btn-sm { border-radius: 8px; }
+
+        /* Próximas reuniões */
+        .reuniao-card {
+            border-left: 4px solid #1a73e8 !important;
+            border-radius: 10px;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .reuniao-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.12) !important; }
+
+        /* Agenda */
+        .agenda-table th, .agenda-table td { vertical-align: top; }
+        .agenda-hoje { background: #e3f2fd !important; }
+        .agenda-cell { cursor: pointer; min-height: 50px; transition: background 0.15s; }
+        .agenda-cell:hover { background: #f0f7ff; }
+        .agenda-reserva {
+            background: linear-gradient(135deg, #e53935, #ef5350);
+            color: white;
+            border-radius: 6px;
+            padding: 4px 6px;
+            font-size: 0.75rem;
+        }
+        .agenda-reserva a { color: #ddd; }
+    </style>
+    <meta http-equiv="refresh" content="60">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{{ url_for('index') }}">
+                <img src="{{ url_for('static', filename='img/logo.jpg') }}" alt="Logo" style="height: 40px; border-radius: 6px; background: white; padding: 2px;">
+                Controle
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="nav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}"><i class="bi bi-grid-3x3-gap"></i> Painel</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('agenda') }}"><i class="bi bi-calendar-week"></i> Agenda</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('gerenciar_salas') }}"><i class="bi bi-door-open"></i> Salas</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('gerenciar_notebooks') }}"><i class="bi bi-laptop"></i> Notebooks</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="flash-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="container mb-5">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        setTimeout(() => {
+            document.querySelectorAll('.flash-container .alert').forEach(a => {
+                new bootstrap.Alert(a).close();
+            });
+        }, 4000);
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

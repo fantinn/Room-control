@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Gerenciar Salas{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-plus-circle"></i> Nova Sala</h5>
+                <form method="POST" action="{{ url_for('nova_sala') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Nome *</label>
+                        <input type="text" name="nome" class="form-control" placeholder="Ex: Sala 1" required>
+                    </div>
+                    <button class="btn btn-primary w-100">Cadastrar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-list"></i> Salas ({{ salas|length }})</h5>
+                {% if salas %}
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Nome</th><th></th></tr></thead>
+                    <tbody>
+                    {% for s in salas %}
+                    <tr>
+                        <td><strong>{{ s.nome }}</strong></td>
+                        <td class="text-end">
+                            <form method="POST" action="{{ url_for('excluir_sala', sala_id=s.id) }}"
+                                  onsubmit="return confirm('Excluir {{ s.nome }}?')">
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted text-center py-3 mb-0">Nenhuma sala cadastrada.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

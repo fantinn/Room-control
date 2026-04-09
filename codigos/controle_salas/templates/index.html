@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}Painel - Controle{% endblock %}
+
+{% block content %}
+<!-- SALAS -->
+<h5 class="mb-3"><i class="bi bi-door-open"></i> Salas de Reunião</h5>
+{% if salas %}
+<div class="row g-2 mb-4">
+    {% for s in salas %}
+    <div class="col-6 col-md-3 col-lg-2 d-flex">
+        {% if s.ocupada %}
+        <div class="sala-card sala-ocupada sala-drop w-100" data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}"
+             data-bs-toggle="modal" data-bs-target="#liberar{{ s.id }}">
+            <div class="sala-status"><i class="bi bi-lock-fill"></i></div>
+            <h5>{{ s.nome }}</h5>
+            <small><strong>{{ s.responsavel }}</strong></small>
+            {% if s.motivo %}<br><small>{{ s.motivo }}</small>{% endif %}
+            {% if s.ate == '23:59' %}<br><small>Dia inteiro</small>{% else %}<br><small>Até {{ s.ate }}</small>{% endif %}
+            {% if s.link_reuniao %}
+            <div class="mt-1"><a href="{{ s.link_reuniao }}" target="_blank" class="badge bg-primary text-white text-decoration-none" style="font-size:0.6rem;" onclick="event.stopPropagation();"><i class="bi bi-camera-video"></i> Entrar na reunião</a></div>
+            {% endif %}
+            {% for nb in notebooks %}
+                {% if nb.localizacao == s.nome %}
+                <div class="mt-1">
+                    <span class="badge bg-light text-dark nb-in-sala" draggable="true" data-nb-id="{{ nb.id }}" data-nb-nome="{{ nb.nome }}">
+                        <i class="bi bi-laptop"></i> {{ nb.nome }} <i class="bi bi-x-circle"></i>
+                    </span>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% elif s.proxima %}
+        <div class="sala-card sala-proxima sala-drop w-100" data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}"
+             data-bs-toggle="modal" data-bs-target="#reservar{{ s.id }}">
+            <div class="sala-status"><i class="bi bi-clock-fill"></i></div>
+            <h5>{{ s.nome }}</h5>
+            <small><strong>Reservada às {{ s.proxima.hora_inicio }}</strong></small>
+            <br><small>Por: {{ s.proxima.responsavel }}</small>
+            {% if s.proxima.motivo %}<br><small>{{ s.proxima.motivo }}</small>{% endif %}
+            {% for nb in notebooks %}
+                {% if nb.localizacao == s.nome %}
+                <div class="mt-1">
+                    <span class="badge bg-light text-dark nb-in-sala" draggable="true" data-nb-id="{{ nb.id }}" data-nb-nome="{{ nb.nome }}">
+                        <i class="bi bi-laptop"></i> {{ nb.nome }} <i class="bi bi-x-circle"></i>
+                    </span>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="sala-card sala-livre sala-drop w-100" data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}"
+             data-bs-toggle="modal" data-bs-target="#reservar{{ s.id }}">
+            <div class="sala-status"><i class="bi bi-unlock-fill"></i></div>
+            <h5>{{ s.nome }}</h5>
+            <small>LIVRE</small>
+            {% for nb in notebooks %}
+                {% if nb.localizacao == s.nome %}
+                <div class="mt-1">
+                    <span class="badge bg-light text-dark nb-in-sala" draggable="true" data-nb-id="{{ nb.id }}" data-nb-nome="{{ nb.nome }}">
+                        <i class="bi bi-laptop"></i> {{ nb.nome }} <i class="bi bi-x-circle"></i>
+                    </span>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modais fora do grid -->
+{% for s in salas %}
+{% if s.ocupada %}
+<div class="modal fade" id="liberar{{ s.id }}" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center p-4">
+                <h5>Liberar {{ s.nome }}?</h5>
+                <p class="text-muted mb-3">Em uso por <strong>{{ s.responsavel }}</strong></p>
+                <form method="POST" action="{{ url_for('liberar_sala', sala_id=s.id) }}">
+                    <button class="btn btn-danger w-100 mb-2">Liberar Agora</button>
+                </form>
+                <button class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+<div class="modal fade" id="reservar{{ s.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('reservar_sala', sala_id=s.id) }}">
+                <div class="modal-body p-4">
+                    <h5 class="mb-3">Reservar {{ s.nome }}</h5>
+                    <p class="text-muted">Duração: 1h30min</p>
+                    <div class="mb-3">
+                        <label class="form-label">Nome do solicitante da sala *</label>
+                        <input type="text" name="responsavel" class="form-control form-control-sm" placeholder="Ex: Gabriel" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label"><i class="bi bi-calendar-event"></i> Data</label>
+                        <input type="date" name="data" class="form-control form-control-sm" value="{{ hoje }}">
+                        <small class="text-muted">Padrão: hoje. Mude para agendar dias à frente.</small>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" name="dia_inteiro" value="1" class="form-check-input" id="diaInteiro{{ s.id }}" onchange="document.getElementById('horaBloco{{ s.id }}').style.display = this.checked ? 'none' : 'block';">
+                        <label class="form-check-label" for="diaInteiro{{ s.id }}">Dia inteiro</label>
+                    </div>
+                    <div class="mb-3" id="horaBloco{{ s.id }}">
+                        <label class="form-label">Hora de início</label>
+                        <input type="time" name="hora_inicio" class="form-control form-control-sm" value="{{ agora }}">
+                        <small class="text-muted">Padrão: agora. Mude se for agendar antes.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Participantes</label>
+                        <input type="text" name="participantes" class="form-control form-control-sm" placeholder="Ex: Ana, João, Maria">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Motivo</label>
+                        <input type="text" name="motivo" class="form-control form-control-sm" placeholder="Reunião de equipe, etc.">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label"><i class="bi bi-camera-video"></i> Link da reunião (Teams)</label>
+                        <input type="url" name="link_reuniao" class="form-control form-control-sm" placeholder="Cole o link do Teams aqui">
+                    </div>
+                    <button class="btn btn-success w-100 mb-2">Reservar</button>
+                    <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% else %}
+<div class="alert alert-secondary mb-4">
+    Nenhuma sala cadastrada. <a href="{{ url_for('gerenciar_salas') }}">Cadastre aqui</a>.
+</div>
+{% endif %}
+
+<!-- NOTEBOOKS LIVRES (que não estão em nenhuma sala) -->
+<h5 class="mb-3"><i class="bi bi-laptop"></i> Notebooks Livres <small class="text-muted fw-normal" style="font-size:0.7em;">— arraste para uma sala</small></h5>
+<div id="zona-livres" class="row g-1 mb-4 align-items-stretch" style="min-height:60px; border:2px dashed transparent; border-radius:12px; transition: border-color 0.2s;">
+    {% for nb in notebooks_livres %}
+    <div class="col-4 col-md-3 col-lg-2 d-flex">
+        <div class="nb-card nb-drag w-100" draggable="true" data-nb-id="{{ nb.id }}" data-nb-nome="{{ nb.nome }}" style="padding:14px 20px;">
+            <i class="bi bi-laptop" style="font-size: 1.5rem; color: #7b1fa2;"></i>
+            <h6 class="mt-1 mb-1">{{ nb.nome }}</h6>
+            <span class="badge bg-secondary" style="font-size:0.65rem;">{{ nb.localizacao }}</span>
+        </div>
+    </div>
+    {% endfor %}
+    {% if not notebooks_livres %}
+    <div class="col-12 text-center text-muted py-2" style="font-size:0.8rem;" id="empty-livres-msg">
+        Todos os notebooks estão em salas. Arraste aqui para liberar.
+    </div>
+    {% endif %}
+</div>
+
+{% if proximas %}
+<h5 class="mt-4 mb-3"><i class="bi bi-bell-fill text-warning"></i> Próximas Reuniões</h5>
+<div class="row g-2 mb-4">
+    {% for r in proximas %}
+    <div class="col-12 col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm reuniao-card">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="badge {% if r.data == hoje %}bg-danger{% else %}bg-primary{% endif %}" style="font-size:0.75rem;">
+                                {% if r.data == hoje %}HOJE{% else %}{{ r.data[8:10] }}/{{ r.data[5:7] }}{% endif %}
+                            </span>
+                            <strong style="font-size:0.95rem;">{{ r.sala_nome }}</strong>
+                        </div>
+                        <div style="font-size:1.1rem; font-weight:700; color:#1a73e8;">
+                            <i class="bi bi-clock"></i> {{ r.hora_inicio }} - {{ r.hora_fim }}
+                        </div>
+                        <div class="mt-1" style="font-size:0.85rem;">
+                            <i class="bi bi-person-fill text-muted"></i> {{ r.responsavel }}
+                            {% if r.participantes %}<div class="text-muted" style="font-size:0.8rem;">Participantes: {{ r.participantes }}</div>{% endif %}
+                        </div>
+                        {% if r.motivo %}
+                        <div style="font-size:0.8rem; color:#666;">{{ r.motivo }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex flex-column gap-1 align-items-end">
+                        {% if r.link_reuniao %}
+                        <a href="{{ r.link_reuniao }}" target="_blank" class="btn btn-primary btn-sm py-1 px-2" style="font-size:0.75rem;">
+                            <i class="bi bi-camera-video"></i> Entrar
+                        </a>
+                        {% endif %}
+                        <button class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.7rem;" data-bs-toggle="modal" data-bs-target="#editar{{ r.id }}" title="Editar"><i class="bi bi-pencil"></i></button>
+                        <form method="POST" action="{{ url_for('cancelar_reserva', reserva_id=r.id) }}">
+                            <button class="btn btn-outline-danger btn-sm py-0 px-2" style="font-size:0.7rem;" title="Excluir"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal editar reserva -->
+    <div class="modal fade" id="editar{{ r.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="POST" action="{{ url_for('editar_reserva', reserva_id=r.id) }}">
+                    <div class="modal-body p-4">
+                        <h5 class="mb-3"><i class="bi bi-pencil-square"></i> Editar — {{ r.sala_nome }}</h5>
+                        <div class="mb-3">
+                            <label class="form-label">Responsável *</label>
+                            <input type="text" name="responsavel" class="form-control form-control-sm" value="{{ r.responsavel }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-calendar-event"></i> Data</label>
+                            <input type="date" name="data" class="form-control form-control-sm" value="{{ r.data }}">
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" name="dia_inteiro" value="1" class="form-check-input" id="editDia{{ r.id }}"
+                                   {% if r.hora_inicio == '00:00' and r.hora_fim == '23:59' %}checked{% endif %}
+                                   onchange="document.getElementById('editHora{{ r.id }}').style.display = this.checked ? 'none' : 'block';">
+                            <label class="form-check-label" for="editDia{{ r.id }}">Dia inteiro</label>
+                        </div>
+                        <div class="mb-3" id="editHora{{ r.id }}" {% if r.hora_inicio == '00:00' and r.hora_fim == '23:59' %}style="display:none;"{% endif %}>
+                            <label class="form-label">Hora de início</label>
+                            <input type="time" name="hora_inicio" class="form-control form-control-sm" value="{{ r.hora_inicio }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Participantes</label>
+                            <input type="text" name="participantes" class="form-control form-control-sm" value="{{ r.participantes or '' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Motivo</label>
+                            <input type="text" name="motivo" class="form-control form-control-sm" value="{{ r.motivo or '' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-camera-video"></i> Link da reunião</label>
+                            <input type="url" name="link_reuniao" class="form-control form-control-sm" value="{{ r.link_reuniao or '' }}">
+                        </div>
+                        <button class="btn btn-success w-100 mb-2"><i class="bi bi-check-lg"></i> Salvar</button>
+                        <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+let draggedNbId = null;
+let dragSource = null; // 'livres' or 'sala'
+
+// Drag from notebooks livres section
+document.querySelectorAll('.nb-drag').forEach(el => {
+    el.addEventListener('dragstart', e => {
+        draggedNbId = el.dataset.nbId;
+        dragSource = 'livres';
+        el.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    el.addEventListener('dragend', () => { el.style.opacity = '1'; });
+});
+
+// Drag from notebook badges INSIDE salas
+document.querySelectorAll('.nb-in-sala').forEach(el => {
+    el.addEventListener('dragstart', e => {
+        e.stopPropagation();
+        draggedNbId = el.dataset.nbId;
+        dragSource = 'sala';
+        el.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    el.addEventListener('dragend', () => { el.style.opacity = '1'; });
+});
+
+// Drop onto salas (move notebook INTO sala)
+document.querySelectorAll('.sala-drop').forEach(el => {
+    el.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        el.style.outline = '3px dashed white';
+        el.style.outlineOffset = '-3px';
+    });
+    el.addEventListener('dragleave', () => {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+    });
+    el.addEventListener('drop', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+        el.removeAttribute('data-bs-toggle');
+        setTimeout(() => el.setAttribute('data-bs-toggle', 'modal'), 300);
+
+        if (!draggedNbId) return;
+        const salaNome = el.dataset.salaNome;
+        fetch(`/notebooks/${draggedNbId}/mover-para-sala`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sala_nome: salaNome})
+        }).then(r => r.json()).then(data => {
+            if (data.ok) location.reload();
+        });
+    });
+});
+
+// Drop onto "Notebooks Livres" zone (remove notebook FROM sala)
+const zonaLivres = document.getElementById('zona-livres');
+zonaLivres.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    zonaLivres.style.borderColor = '#7b1fa2';
+});
+zonaLivres.addEventListener('dragleave', () => {
+    zonaLivres.style.borderColor = 'transparent';
+});
+zonaLivres.addEventListener('drop', e => {
+    e.preventDefault();
+    zonaLivres.style.borderColor = 'transparent';
+    if (!draggedNbId || dragSource !== 'sala') return;
+    fetch(`/notebooks/${draggedNbId}/tirar-da-sala`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    }).then(r => r.json()).then(data => {
+        if (data.ok) location.reload();
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Agenda - Controle{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0"><i class="bi bi-calendar-week"></i> Agenda Semanal</h5>
+    <div class="d-flex gap-2 align-items-center">
+        <a href="{{ url_for('agenda', semana=semana_anterior) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-left"></i> Anterior</a>
+        <a href="{{ url_for('agenda') }}" class="btn btn-outline-primary btn-sm">Hoje</a>
+        <a href="{{ url_for('agenda', semana=semana_proxima) }}" class="btn btn-outline-secondary btn-sm">Próxima <i class="bi bi-chevron-right"></i></a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm mb-0 agenda-table" style="font-size:0.8rem;">
+                <thead>
+                    <tr class="text-center" style="background:#f8f9fa;">
+                        <th style="width:100px;">Sala</th>
+                        {% for i in range(dias|length) %}
+                        <th class="{% if dias[i].isoformat() == hoje %}agenda-hoje{% endif %}" style="min-width:120px;">
+                            <div>{{ dias_semana[i] }}</div>
+                            <div class="fw-bold" style="font-size:0.95rem;">{{ dias[i].strftime('%d/%m') }}</div>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in salas %}
+                    <tr>
+                        <td class="fw-bold text-center align-middle" style="background:#f8f9fa;">{{ s.nome }}</td>
+                        {% for d in dias %}
+                        {% set d_str = d.isoformat() %}
+                        <td class="align-top {% if d_str == hoje %}agenda-hoje{% endif %} agenda-cell"
+                            data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}" data-date="{{ d_str }}">
+                            {% if agenda_data[d_str][s.nome] %}
+                                {% for r in agenda_data[d_str][s.nome] %}
+                                <div class="agenda-reserva mb-1">
+                                    <div class="fw-bold">{{ r.hora_inicio }}-{{ r.hora_fim }}</div>
+                                    <div>{{ r.responsavel }}</div>
+                                    {% if r.participantes %}<div class="text-muted" style="font-size:0.7rem;">Participantes: {{ r.participantes }}</div>{% endif %}
+                                    {% if r.motivo %}<div class="text-muted" style="font-size:0.7rem;">{{ r.motivo }}</div>{% endif %}
+                                    {% if r.link_reuniao %}<a href="{{ r.link_reuniao }}" target="_blank" style="font-size:0.65rem;"><i class="bi bi-camera-video"></i> Link</a>{% endif %}
+                                    <form method="POST" action="{{ url_for('cancelar_reserva', reserva_id=r.id) }}" class="d-inline">
+                                        <button class="btn btn-link text-danger p-0" style="font-size:0.65rem;" title="Cancelar"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-muted text-center" style="font-size:0.7rem; opacity:0.5;">—</div>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para reservar via agenda -->
+<div class="modal fade" id="agendaReservar" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" id="agendaReservarForm">
+                <div class="modal-body p-4">
+                    <h5 class="mb-3">Reservar <span id="agendaSalaNome"></span></h5>
+                    <p class="text-muted mb-1">Data: <strong id="agendaDataLabel"></strong></p>
+                    <p class="text-muted">Duração: 1h30min</p>
+                    <input type="hidden" name="data" id="agendaDataInput">
+                    <div class="mb-3">
+                        <label class="form-label">Solicitante da sala *</label>
+                        <input type="text" name="responsavel" class="form-control form-control-sm" placeholder="Ex: Gabriel" required>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" name="dia_inteiro" value="1" class="form-check-input" id="agendaDiaInteiro" onchange="document.getElementById('agendaHoraBloco').style.display = this.checked ? 'none' : 'block';">
+                        <label class="form-check-label" for="agendaDiaInteiro">Dia inteiro</label>
+                    </div>
+                    <div class="mb-3" id="agendaHoraBloco">
+                        <label class="form-label">Hora de início *</label>
+                        <input type="time" name="hora_inicio" class="form-control form-control-sm" value="09:00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Motivo</label>
+                        <input type="text" name="motivo" class="form-control form-control-sm" placeholder="Reunião de equipe, etc.">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label"><i class="bi bi-camera-video"></i> Link da reunião (Teams)</label>
+                        <input type="url" name="link_reuniao" class="form-control form-control-sm" placeholder="Cole o link do Teams aqui">
+                    </div>
+                    <button class="btn btn-success w-100 mb-2">Reservar</button>
+                    <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Click on agenda cell to open reservation modal
+document.querySelectorAll('.agenda-cell').forEach(cell => {
+    cell.addEventListener('click', e => {
+        if (e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+        const salaId = cell.dataset.salaId;
+        const salaNome = cell.dataset.salaNome;
+        const dateStr = cell.dataset.date;
+        const parts = dateStr.split('-');
+        const dateLabel = parts[2] + '/' + parts[1];
+
+        document.getElementById('agendaSalaNome').textContent = salaNome;
+        document.getElementById('agendaDataLabel').textContent = dateLabel;
+        document.getElementById('agendaDataInput').value = dateStr;
+        document.getElementById('agendaReservarForm').action = '/reservar/' + salaId;
+        document.getElementById('agendaDiaInteiro').checked = false;
+        document.getElementById('agendaHoraBloco').style.display = 'block';
+
+        new bootstrap.Modal(document.getElementById('agendaReservar')).show();
+    });
+});
+</script>
+{% endblock %}
