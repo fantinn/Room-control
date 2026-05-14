@@ -9,11 +9,11 @@
     {% for s in salas %}
     <div class="col-6 col-md-3 col-lg-2 d-flex">
         {% if s.ocupada %}
-        <div class="sala-card sala-ocupada sala-drop w-100" data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}"
+        <div class="sala-card sala-ocupada sala-drop w-100{% if s.nome == 'Viagens' %} sala-viagens{% endif %}" data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}"
              data-bs-toggle="modal" data-bs-target="#liberar{{ s.id }}">
             <div class="sala-status"><i class="bi bi-lock-fill"></i></div>
             <h5>{{ s.nome }}</h5>
-            <small><strong>{{ s.responsavel }}</strong></small>
+            <small><strong>Solicitante: {{ s.responsavel }}</strong></small>
             {% if s.motivo %}<br><small>{{ s.motivo }}</small>{% endif %}
             {% if s.ate == '23:59' %}<br><small>Dia inteiro</small>{% else %}<br><small>Até {{ s.ate }}</small>{% endif %}
             {% if s.link_reuniao %}
@@ -30,12 +30,12 @@
             {% endfor %}
         </div>
         {% elif s.proxima %}
-        <div class="sala-card sala-proxima sala-drop w-100" data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}"
+        <div class="sala-card sala-proxima sala-drop w-100{% if s.nome == 'Viagens' %} sala-viagens{% endif %}" data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}"
              data-bs-toggle="modal" data-bs-target="#reservar{{ s.id }}">
             <div class="sala-status"><i class="bi bi-clock-fill"></i></div>
             <h5>{{ s.nome }}</h5>
             <small><strong>Reservada às {{ s.proxima.hora_inicio }}</strong></small>
-            <br><small>Por: {{ s.proxima.responsavel }}</small>
+            <br><small>Solicitante: {{ s.proxima.responsavel }}</small>
             {% if s.proxima.motivo %}<br><small>{{ s.proxima.motivo }}</small>{% endif %}
             {% for nb in notebooks %}
                 {% if nb.localizacao == s.nome %}
@@ -48,7 +48,7 @@
             {% endfor %}
         </div>
         {% else %}
-        <div class="sala-card sala-livre sala-drop w-100" data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}"
+        <div class="sala-card sala-livre sala-drop w-100{% if s.nome == 'Viagens' %} sala-viagens{% endif %}" data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}"
              data-bs-toggle="modal" data-bs-target="#reservar{{ s.id }}">
             <div class="sala-status"><i class="bi bi-unlock-fill"></i></div>
             <h5>{{ s.nome }}</h5>
@@ -86,45 +86,91 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Modal RESERVAR -->
 <div class="modal fade" id="reservar{{ s.id }}" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-md">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('reservar_sala', sala_id=s.id) }}">
-                <div class="modal-body p-4">
-                    <h5 class="mb-3">Reservar {{ s.nome }}</h5>
-                    <p class="text-muted">Duração: 1h30min</p>
-                    <div class="mb-3">
-                        <label class="form-label">Nome do solicitante da sala *</label>
-                        <input type="text" name="responsavel" class="form-control form-control-sm" placeholder="Ex: Gabriel" required>
+                <div class="modal-body p-3">
+                    <h5 class="mb-1">Reservar {{ s.nome }}</h5>
+                    <small class="text-muted d-block mb-3">Defina a data, hora e duração abaixo</small>
+
+                    <!-- Data + Hora -->
+<div class="mb-2">
+    <div class="input-group input-group-sm">
+        <input type="text"
+               id="dataReserve{{ s.id }}"
+               name="data_reserva"
+               class="form-control form-control-sm data-reserva-input"
+               placeholder="DD/MM"
+               autocomplete="off"
+               required
+               style="max-width:145px;"
+               maxlength="5">
+
+        <input type="text"
+               id="horaReserve{{ s.id }}"
+               name="hora_reserva"
+               class="form-control form-control-sm hora-reserva-input"
+               placeholder="00:00"
+               autocomplete="off"
+               required
+               style="max-width:80px;"
+               maxlength="5">
+    </div>
+
+    <input type="hidden"
+           id="dataHoraReserve{{ s.id }}"
+           name="data_hora"
+           class="datahora-hidden"
+           data-data="#dataReserve{{ s.id }}"
+           data-hora="#horaReserve{{ s.id }}">
+</div>
+
+                    <!-- Duração flexível -->
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm mb-1 text-muted" style="font-size:0.78rem;"><i class="bi bi-hourglass-split"></i> Duração</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="duracao-toggle" id="duracaoToggle{{ s.id }}">
+                                <span class="dur-btn" data-val="30">30min</span>
+                                <span class="dur-btn active-dur" data-val="60">1h</span>
+                                <span class="dur-btn" data-val="1439">Dia inteiro</span>
+                                <span class="dur-btn" data-val="custom">Mais</span>
+                            </div>
+                            <input type="number" id="duracaoCustom{{ s.id }}" name="duracao" value="60" min="15" max="1439"
+                                   class="form-control form-control-sm duracao-input" style="max-width:80px; display:none;" placeholder="min">
+                            <input type="hidden" id="duracaoHidden{{ s.id }}" name="duracao" value="60">
+                        </div>
+                        <small class="text-muted" id="duracaoHint{{ s.id }}" style="font-size:0.72rem;">Término estimado: —</small>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label"><i class="bi bi-calendar-event"></i> Data</label>
-                        <input type="date" name="data" class="form-control form-control-sm" value="{{ hoje }}">
-                        <small class="text-muted">Padrão: hoje. Mude para agendar dias à frente.</small>
+
+                    <div class="mb-2">
+                        <input type="text" name="responsavel" class="form-control form-control-sm" placeholder="Solicitante *" required>
                     </div>
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" name="dia_inteiro" value="1" class="form-check-input" id="diaInteiro{{ s.id }}" onchange="document.getElementById('horaBloco{{ s.id }}').style.display = this.checked ? 'none' : 'block';">
-                        <label class="form-check-label" for="diaInteiro{{ s.id }}">Dia inteiro</label>
+                    <div class="mb-2">
+                        <input type="text" name="motivo" class="form-control form-control-sm" placeholder="Assunto da reunião">
                     </div>
-                    <div class="mb-3" id="horaBloco{{ s.id }}">
-                        <label class="form-label">Hora de início</label>
-                        <input type="time" name="hora_inicio" class="form-control form-control-sm" value="{{ agora }}">
-                        <small class="text-muted">Padrão: agora. Mude se for agendar antes.</small>
+                    <div class="mb-2">
+                        <input type="url" name="link_reuniao" class="form-control form-control-sm" placeholder="Link Teams (opcional)">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Participantes</label>
-                        <input type="text" name="participantes" class="form-control form-control-sm" placeholder="Ex: Ana, João, Maria">
+                    <hr class="my-2">
+                    <small class="text-muted"><i class="bi bi-building"></i> Cliente (opcional)</small>
+                    <div class="row g-2 mt-1 mb-2">
+                        <div class="col-7">
+                            <input type="text" name="nome_cliente" class="form-control form-control-sm" placeholder="Nome cliente">
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Motivo</label>
-                        <input type="text" name="motivo" class="form-control form-control-sm" placeholder="Reunião de equipe, etc.">
+                    <div class="mb-2">
+                        <input type="hidden" name="tipo_cliente" value="" id="tipoClienteInput{{ s.id }}">
+                        <div class="tipo-toggle" data-input="tipoClienteInput{{ s.id }}" data-value="">
+                            <span class="tipo-label">Tipo:</span>
+                            <span class="tipo-btn" data-val="ativo">Ativo</span>
+                            <span class="tipo-btn" data-val="wo">WO</span>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label"><i class="bi bi-camera-video"></i> Link da reunião (Teams)</label>
-                        <input type="url" name="link_reuniao" class="form-control form-control-sm" placeholder="Cole o link do Teams aqui">
-                    </div>
-                    <button class="btn btn-success w-100 mb-2">Reservar</button>
-                    <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-reservar btn-sm w-100 mb-1">Reservar</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" data-bs-dismiss="modal">Cancelar</button>
                 </div>
             </form>
         </div>
@@ -138,7 +184,7 @@
 </div>
 {% endif %}
 
-<!-- NOTEBOOKS LIVRES (que não estão em nenhuma sala) -->
+<!-- NOTEBOOKS LIVRES -->
 <h5 class="mb-3"><i class="bi bi-laptop"></i> Notebooks Livres <small class="text-muted fw-normal" style="font-size:0.7em;">— arraste para uma sala</small></h5>
 <div id="zona-livres" class="row g-1 mb-4 align-items-stretch" style="min-height:60px; border:2px dashed transparent; border-radius:12px; transition: border-color 0.2s;">
     {% for nb in notebooks_livres %}
@@ -158,7 +204,7 @@
 </div>
 
 {% if proximas %}
-<h5 class="mt-4 mb-3"><i class="bi bi-bell-fill text-warning"></i> Próximas Reuniões</h5>
+<h5 class="mt-4 mb-3">Próximas Reuniões</h5>
 <div class="row g-2 mb-4">
     {% for r in proximas %}
     <div class="col-12 col-md-6 col-lg-4">
@@ -199,45 +245,74 @@
         </div>
     </div>
 
-    <!-- Modal editar reserva -->
+    <!-- Modal EDITAR reserva -->
     <div class="modal fade" id="editar{{ r.id }}" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <form method="POST" action="{{ url_for('editar_reserva', reserva_id=r.id) }}">
-                    <div class="modal-body p-4">
+                    <div class="modal-body p-3">
                         <h5 class="mb-3"><i class="bi bi-pencil-square"></i> Editar — {{ r.sala_nome }}</h5>
-                        <div class="mb-3">
-                            <label class="form-label">Responsável *</label>
-                            <input type="text" name="responsavel" class="form-control form-control-sm" value="{{ r.responsavel }}" required>
+
+                        <div class="mb-2">
+                            <input type="text" name="responsavel" class="form-control form-control-sm" value="{{ r.responsavel }}" placeholder="Responsável *" required>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-calendar-event"></i> Data</label>
-                            <input type="date" name="data" class="form-control form-control-sm" value="{{ r.data }}">
+
+                        <!-- Data + Hora -->
+                        <div class="mb-2">
+                            <div class="input-group input-group-sm">
+                                <input type="text" id="dataEdit{{ r.id }}" name="data_reserva_edit" class="form-control form-control-sm data-edit-input" placeholder="DD/MM/AAAA" maxlength="10" value="{{ r.data[8:10] }}/{{ r.data[5:7] }}/{{ r.data[0:4] }}" autocomplete="off" required style="max-width:145px;">
+                                <input type="text" id="horaEdit{{ r.id }}" name="hora_reserva_edit" class="form-control form-control-sm hora-edit-input" placeholder="00:00" value="{{ r.hora_inicio }}" autocomplete="off" required style="max-width:80px;" maxlength="5">
+                            </div>
+                            <!-- ✅ CORRIGIDO: envia DD/MM/YYYY HH:MM igual ao modal de reservar -->
+                            <input type="hidden" id="dataHoraEdit{{ r.id }}" name="data_hora" class="datahora-hidden-edit" data-data="#dataEdit{{ r.id }}" data-hora="#horaEdit{{ r.id }}">
                         </div>
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" name="dia_inteiro" value="1" class="form-check-input" id="editDia{{ r.id }}"
-                                   {% if r.hora_inicio == '00:00' and r.hora_fim == '23:59' %}checked{% endif %}
-                                   onchange="document.getElementById('editHora{{ r.id }}').style.display = this.checked ? 'none' : 'block';">
-                            <label class="form-check-label" for="editDia{{ r.id }}">Dia inteiro</label>
+
+                        <!-- Duração flexível na edição -->
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm mb-1 text-muted" style="font-size:0.78rem;"><i class="bi bi-hourglass-split"></i> Duração</label>
+                            {% set dur_atual = ((r.hora_fim[:2]|int * 60 + r.hora_fim[3:5]|int) - (r.hora_inicio[:2]|int * 60 + r.hora_inicio[3:5]|int)) %}
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="duracao-toggle" id="duracaoToggleEdit{{ r.id }}">
+                                    <span class="dur-btn{% if dur_atual == 30 %} active-dur{% endif %}" data-val="30">30min</span>
+                                    <span class="dur-btn{% if dur_atual == 60 %} active-dur{% endif %}" data-val="60">1h</span>
+                                    <span class="dur-btn{% if dur_atual == 1439 %} active-dur{% endif %}" data-val="1439">Dia inteiro</span>
+                                    <span class="dur-btn{% if dur_atual not in [30,60,1439] %} active-dur{% endif %}" data-val="custom">Mais</span>
+                                </div>
+                                <input type="number" id="duracaoCustomEdit{{ r.id }}" name="duracao_edit" value="{{ dur_atual }}" min="15" max="1439"
+                                       class="form-control form-control-sm duracao-input"
+                                       style="max-width:80px; {% if dur_atual in [30,60,1439] %}display:none;{% endif %}"
+                                       placeholder="min">
+                                <input type="hidden" id="duracaoHiddenEdit{{ r.id }}" name="duracao" value="{{ dur_atual }}">
+                            </div>
+                            <small class="text-muted" id="duracaoHintEdit{{ r.id }}" style="font-size:0.72rem;">Término estimado: —</small>
                         </div>
-                        <div class="mb-3" id="editHora{{ r.id }}" {% if r.hora_inicio == '00:00' and r.hora_fim == '23:59' %}style="display:none;"{% endif %}>
-                            <label class="form-label">Hora de início</label>
-                            <input type="time" name="hora_inicio" class="form-control form-control-sm" value="{{ r.hora_inicio }}">
+
+                        <div class="mb-2">
+                            <input type="text" name="motivo" class="form-control form-control-sm" value="{{ r.motivo or '' }}" placeholder="Assunto da reunião">
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Participantes</label>
-                            <input type="text" name="participantes" class="form-control form-control-sm" value="{{ r.participantes or '' }}">
+                        <div class="mb-2">
+                            <input type="url" name="link_reuniao" class="form-control form-control-sm" value="{{ r.link_reuniao or '' }}" placeholder="Link Teams (opcional)">
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Motivo</label>
-                            <input type="text" name="motivo" class="form-control form-control-sm" value="{{ r.motivo or '' }}">
+                        <hr class="my-2">
+                        <small class="text-muted"><i class="bi bi-building"></i> Cliente (opcional)</small>
+                        <div class="row g-2 mt-1 mb-2">
+                            <div class="col-7">
+                                <input type="text" name="nome_cliente" class="form-control form-control-sm" value="{{ r.nome_cliente or '' }}" placeholder="Nome cliente">
+                            </div>
+                            <div class="col-5">
+                                <input type="text" name="cnpj_cliente" class="form-control form-control-sm" value="{{ r.cnpj_cliente or '' }}" placeholder="CNPJ">
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-camera-video"></i> Link da reunião</label>
-                            <input type="url" name="link_reuniao" class="form-control form-control-sm" value="{{ r.link_reuniao or '' }}">
+                        <div class="mb-2">
+                            <input type="hidden" name="tipo_cliente" value="{{ r.tipo_cliente or '' }}" id="tipoClienteEdit{{ r.id }}">
+                            <div class="tipo-toggle" data-input="tipoClienteEdit{{ r.id }}" data-value="{{ r.tipo_cliente or '' }}">
+                                <span class="tipo-label">Tipo:</span>
+                                <span class="tipo-btn" data-val="ativo">Ativo</span>
+                                <span class="tipo-btn" data-val="wo">WO</span>
+                            </div>
                         </div>
-                        <button class="btn btn-success w-100 mb-2"><i class="bi bi-check-lg"></i> Salvar</button>
-                        <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Cancelar</button>
+                        <button class="btn btn-reservar btn-sm w-100 mb-1"><i class="bi bi-check-lg"></i> Salvar</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" data-bs-dismiss="modal">Cancelar</button>
                     </div>
                 </form>
             </div>
@@ -247,88 +322,149 @@
     {% endfor %}
 </div>
 {% endif %}
+
+<style>
+.duracao-toggle {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+.dur-btn {
+    cursor: pointer;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    border: 1px solid #ccc;
+    background: #f8f9fa;
+    color: #555;
+    user-select: none;
+    transition: all 0.15s;
+}
+.dur-btn:hover {
+    background: #e2e6ea;
+}
+.dur-btn.active-dur {
+    background: #1a73e8;
+    color: #fff;
+    border-color: #1a73e8;
+    font-weight: 600;
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
 <script>
-let draggedNbId = null;
-let dragSource = null; // 'livres' or 'sala'
-
-// Drag from notebooks livres section
-document.querySelectorAll('.nb-drag').forEach(el => {
-    el.addEventListener('dragstart', e => {
-        draggedNbId = el.dataset.nbId;
-        dragSource = 'livres';
-        el.style.opacity = '0.5';
-        e.dataTransfer.effectAllowed = 'move';
+// ──────────────── DRAG & DROP NOTEBOOKS ────────────────
+// Máscara DD/MM para modal de reservar
+document.querySelectorAll('.data-reserva-input').forEach(input => {
+    input.addEventListener('input', () => {
+        let v = input.value.replace(/\D/g, '');
+        if (v.length >= 3) v = v.slice(0, 2) + '/' + v.slice(2, 4);
+        input.value = v;
     });
-    el.addEventListener('dragend', () => { el.style.opacity = '1'; });
 });
 
-// Drag from notebook badges INSIDE salas
-document.querySelectorAll('.nb-in-sala').forEach(el => {
-    el.addEventListener('dragstart', e => {
-        e.stopPropagation();
-        draggedNbId = el.dataset.nbId;
-        dragSource = 'sala';
-        el.style.opacity = '0.5';
-        e.dataTransfer.effectAllowed = 'move';
+// Máscara DD/MM/YYYY para modal de editar (data já vem completa)
+document.querySelectorAll('.data-edit-input').forEach(input => {
+    input.addEventListener('input', () => {
+        let v = input.value.replace(/\D/g, '');
+        if (v.length > 4) v = v.slice(0, 2) + '/' + v.slice(2, 4) + '/' + v.slice(4, 8);
+        else if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2, 4);
+        input.value = v;
     });
-    el.addEventListener('dragend', () => { el.style.opacity = '1'; });
 });
 
-// Drop onto salas (move notebook INTO sala)
-document.querySelectorAll('.sala-drop').forEach(el => {
-    el.addEventListener('dragover', e => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        el.style.outline = '3px dashed white';
-        el.style.outlineOffset = '-3px';
-    });
-    el.addEventListener('dragleave', () => {
-        el.style.outline = '';
-        el.style.outlineOffset = '';
-    });
-    el.addEventListener('drop', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        el.style.outline = '';
-        el.style.outlineOffset = '';
-        el.removeAttribute('data-bs-toggle');
-        setTimeout(() => el.setAttribute('data-bs-toggle', 'modal'), 300);
+document.querySelectorAll('.hora-reserva-input, .hora-edit-input').forEach(input => {
+    input.addEventListener('input', () => {
+        let v = input.value.replace(/\D/g, '');
 
-        if (!draggedNbId) return;
-        const salaNome = el.dataset.salaNome;
-        fetch(`/notebooks/${draggedNbId}/mover-para-sala`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({sala_nome: salaNome})
-        }).then(r => r.json()).then(data => {
-            if (data.ok) location.reload();
+        if (v.length >= 3) {
+            v = v.slice(0, 2) + ':' + v.slice(2, 4);
+        }
+
+        input.value = v;
+    });
+});
+
+// ──────────────── COMBINA DATA+HORA ANTES DE SUBMETER ────────────────
+document.querySelectorAll('form').forEach(form => {
+    form.addEventListener('submit', () => {
+
+        // Modal reservar
+        form.querySelectorAll('.datahora-hidden').forEach(hidden => {
+            const dataEl = document.querySelector(hidden.dataset.data);
+            const horaEl = document.querySelector(hidden.dataset.hora);
+
+            if (dataEl && horaEl) {
+                const anoAtual = new Date().getFullYear();
+                hidden.value = dataEl.value + '/' + anoAtual + ' ' + horaEl.value;
+            }
+        });
+
+        // Modal editar — campo data já vem como DD/MM/YYYY, só junta com hora
+        form.querySelectorAll('.datahora-hidden-edit').forEach(hidden => {
+            const dataEl = document.querySelector(hidden.dataset.data);
+            const horaEl = document.querySelector(hidden.dataset.hora);
+
+            if (dataEl && horaEl) {
+                hidden.value = dataEl.value + ' ' + horaEl.value;
+            }
+        });
+
+        // Evita duplicar campo duração
+        form.querySelectorAll('input[type=number].duracao-input').forEach(customEl => {
+            customEl.disabled = true;
         });
     });
 });
 
-// Drop onto "Notebooks Livres" zone (remove notebook FROM sala)
-const zonaLivres = document.getElementById('zona-livres');
-zonaLivres.addEventListener('dragover', e => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    zonaLivres.style.borderColor = '#7b1fa2';
-});
-zonaLivres.addEventListener('dragleave', () => {
-    zonaLivres.style.borderColor = 'transparent';
-});
-zonaLivres.addEventListener('drop', e => {
-    e.preventDefault();
-    zonaLivres.style.borderColor = 'transparent';
-    if (!draggedNbId || dragSource !== 'sala') return;
-    fetch(`/notebooks/${draggedNbId}/tirar-da-sala`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'}
-    }).then(r => r.json()).then(data => {
-        if (data.ok) location.reload();
+// ──────────────── BOTÕES DE DURAÇÃO ────────────────
+document.querySelectorAll('.duracao-toggle').forEach(toggle => {
+
+    const buttons = toggle.querySelectorAll('.dur-btn');
+
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+
+            buttons.forEach(b => b.classList.remove('active-dur'));
+            btn.classList.add('active-dur');
+
+            const val = btn.dataset.val;
+
+            // procura os inputs relacionados
+            const wrapper = toggle.parentElement;
+
+            const hiddenInput = wrapper.querySelector('input[type="hidden"][name="duracao"]');
+            const customInput = wrapper.querySelector('.duracao-input');
+
+            if (val === 'custom') {
+                customInput.style.display = 'block';
+                customInput.disabled = false;
+                customInput.focus();
+
+                hiddenInput.value = customInput.value || 60;
+            } else {
+                customInput.style.display = 'none';
+                customInput.disabled = true;
+
+                hiddenInput.value = val;
+            }
+        });
     });
+
+    // atualiza hidden quando digitar personalizado
+    const customInput = toggle.parentElement.querySelector('.duracao-input');
+
+    if (customInput) {
+        customInput.addEventListener('input', () => {
+            const hiddenInput = toggle.parentElement.querySelector('input[type="hidden"][name="duracao"]');
+
+            if (hiddenInput) {
+                hiddenInput.value = customInput.value;
+            }
+        });
+    }
 });
+
 </script>
 {% endblock %}

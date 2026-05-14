@@ -1,12 +1,13 @@
 import os
 import sqlite3
+import json
 from datetime import datetime, date, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 DB_PATH = os.path.join(os.path.dirname(__file__), "controle.db")
-DURACAO_REUNIAO = 90  # minutos
+DURACAO_REUNIAO = 90  # minutos (padrão, sobrescrito pelo formulário)
 
 
 def get_db():
@@ -59,7 +60,17 @@ def init_db():
     try:
         conn.execute("ALTER TABLE reservas_sala ADD COLUMN participantes TEXT DEFAULT '';")
     except sqlite3.OperationalError:
-        pass  # coluna já existe
+        pass
+    # Adiciona colunas de cliente (opcionais)
+    for col in ["cnpj_cliente", "nome_cliente", "tipo_cliente"]:
+        try:
+            conn.execute(f"ALTER TABLE reservas_sala ADD COLUMN {col} TEXT DEFAULT '';")
+        except sqlite3.OperationalError:
+            pass
+    try:
+        conn.execute("ALTER TABLE reservas_sala ADD COLUMN qtd_notebooks INTEGER DEFAULT 0;")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -100,12 +111,14 @@ def index():
             "nome": s["nome"],
             "ocupada": reserva is not None,
             "responsavel": reserva["responsavel"] if reserva else None,
+            "participantes": reserva["participantes"] if reserva else None,
             "motivo": reserva["motivo"] if reserva else None,
             "ate": reserva["hora_fim"] if reserva else None,
             "link_reuniao": reserva["link_reuniao"] if reserva else None,
             "proxima": {
                 "responsavel": proxima_res["responsavel"],
                 "hora_inicio": proxima_res["hora_inicio"],
+                "participantes": proxima_res["participantes"],
                 "motivo": proxima_res["motivo"],
             } if proxima_res else None,
         })
@@ -142,31 +155,38 @@ def reservar_sala(sala_id):
     participantes = request.form.get("participantes", "").strip()
     motivo = request.form.get("motivo", "").strip()
     link_reuniao = request.form.get("link_reuniao", "").strip()
-    hora_inicio_form = request.form.get("hora_inicio", "").strip()
-    data_form = request.form.get("data", "").strip()
-    dia_inteiro = request.form.get("dia_inteiro") == "1"
+    datahora_str = request.form.get("data_hora", "").strip()
+    cnpj_cliente = request.form.get("cnpj_cliente", "").strip()
+    nome_cliente = request.form.get("nome_cliente", "").strip()
+    tipo_cliente = request.form.get("tipo_cliente", "").strip()
+    try:
+        qtd_notebooks = int(request.form.get("qtd_notebooks", 0))
+    except (ValueError, TypeError):
+        qtd_notebooks = 0
+
+    # Duração flexível: lê do formulário, padrão 90 min
+    try:
+        duracao = int(request.form.get("duracao", DURACAO_REUNIAO))
+        if duracao < 15:
+            duracao = 15
+        if duracao > 480:
+            duracao = 480
+    except (ValueError, TypeError):
+        duracao = DURACAO_REUNIAO
 
     if not responsavel:
         flash("Informe seu nome.", "danger")
         return redirect(url_for("index"))
 
-    data_reserva = data_form if data_form else date.today().isoformat()
-
-    if dia_inteiro:
-        inicio = "00:00"
-        fim = "23:59"
-    elif hora_inicio_form:
-        try:
-            inicio_dt = datetime.strptime(hora_inicio_form, "%H:%M")
-            inicio = hora_inicio_form
-            fim = (inicio_dt + timedelta(minutes=DURACAO_REUNIAO)).strftime("%H:%M")
-        except ValueError:
-            flash("Hora inválida.", "danger")
-            return redirect(url_for("index"))
-    else:
-        agora = datetime.now()
-        inicio = agora.strftime("%H:%M")
-        fim = (agora + timedelta(minutes=DURACAO_REUNIAO)).strftime("%H:%M")
+    # datahora_str no formato 'dd/mm/yyyy HH:MM'
+    try:
+        dt = datetime.strptime(datahora_str, "%d/%m/%Y %H:%M")
+        data_reserva = dt.date().isoformat()
+        inicio = dt.strftime("%H:%M")
+        fim = (dt + timedelta(minutes=duracao)).strftime("%H:%M")
+    except Exception:
+        flash("Data e hora inválidas.", "danger")
+        return redirect(url_for("index"))
 
     conn = get_db()
     conflito = conn.execute("""
@@ -178,15 +198,18 @@ def reservar_sala(sala_id):
         flash(f"Sala já está ocupada nesse horário em {data_reserva}!", "danger")
     else:
         conn.execute("""
-            INSERT INTO reservas_sala (sala_id, responsavel, participantes, data, hora_inicio, hora_fim, motivo, link_reuniao)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (sala_id, responsavel, participantes, data_reserva, inicio, fim, motivo, link_reuniao))
+            INSERT INTO reservas_sala (sala_id, responsavel, participantes, data, hora_inicio, hora_fim, motivo, link_reuniao, cnpj_cliente, nome_cliente, tipo_cliente, qtd_notebooks)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (sala_id, responsavel, participantes, data_reserva, inicio, fim, motivo, link_reuniao, cnpj_cliente, nome_cliente, tipo_cliente, qtd_notebooks))
         conn.commit()
         try:
             data_fmt = datetime.strptime(data_reserva, "%Y-%m-%d").strftime("%d/%m")
         except ValueError:
             data_fmt = data_reserva
-        flash(f"Sala reservada para {data_fmt} das {inicio} às {fim}.", "success")
+        h = duracao // 60
+        m = duracao % 60
+        dur_txt = f"{h}h{m:02d}" if h > 0 and m > 0 else (f"{h}h" if h > 0 else f"{m}min")
+        flash(f"Sala reservada para {data_fmt} das {inicio} às {fim} ({dur_txt}).", "success")
     conn.close()
     return redirect(url_for("index"))
 
@@ -222,9 +245,24 @@ def editar_reserva(reserva_id):
     participantes = request.form.get("participantes", "").strip()
     motivo = request.form.get("motivo", "").strip()
     link_reuniao = request.form.get("link_reuniao", "").strip()
-    hora_inicio_form = request.form.get("hora_inicio", "").strip()
-    data_form = request.form.get("data", "").strip()
-    dia_inteiro = request.form.get("dia_inteiro") == "1"
+    datahora_str = request.form.get("data_hora", "").strip()
+    cnpj_cliente = request.form.get("cnpj_cliente", "").strip()
+    nome_cliente = request.form.get("nome_cliente", "").strip()
+    tipo_cliente = request.form.get("tipo_cliente", "").strip()
+    try:
+        qtd_notebooks = int(request.form.get("qtd_notebooks", 0))
+    except (ValueError, TypeError):
+        qtd_notebooks = 0
+
+    # Duração flexível na edição
+    try:
+        duracao = int(request.form.get("duracao", DURACAO_REUNIAO))
+        if duracao < 15:
+            duracao = 15
+        if duracao > 480:
+            duracao = 480
+    except (ValueError, TypeError):
+        duracao = DURACAO_REUNIAO
 
     if not responsavel:
         flash("Informe seu nome.", "danger")
@@ -237,23 +275,23 @@ def editar_reserva(reserva_id):
         conn.close()
         return redirect(url_for("index"))
 
-    data_reserva = data_form if data_form else reserva["data"]
-
-    if dia_inteiro:
-        inicio = "00:00"
-        fim = "23:59"
-    elif hora_inicio_form:
+    # ── CORREÇÃO DO BUG: aceita DD/MM/YYYY HH:MM (formato enviado pelo JS) ──
+    parsed = None
+    for fmt in ("%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M"):
         try:
-            inicio_dt = datetime.strptime(hora_inicio_form, "%H:%M")
-            inicio = hora_inicio_form
-            fim = (inicio_dt + timedelta(minutes=DURACAO_REUNIAO)).strftime("%H:%M")
-        except ValueError:
-            flash("Hora inválida.", "danger")
-            conn.close()
-            return redirect(request.referrer or url_for("index"))
-    else:
-        inicio = reserva["hora_inicio"]
-        fim = reserva["hora_fim"]
+            parsed = datetime.strptime(datahora_str, fmt)
+            break
+        except Exception:
+            continue
+
+    if parsed is None:
+        flash("Data e hora inválidas.", "danger")
+        conn.close()
+        return redirect(request.referrer or url_for("index"))
+
+    data_reserva = parsed.date().isoformat()
+    inicio = parsed.strftime("%H:%M")
+    fim = (parsed + timedelta(minutes=duracao)).strftime("%H:%M")
 
     # Conflito (excluindo a própria reserva)
     conflito = conn.execute("""
@@ -262,13 +300,14 @@ def editar_reserva(reserva_id):
     """, (reserva["sala_id"], data_reserva, fim, inicio, reserva_id)).fetchone()
 
     if conflito:
-        flash("Conflito com outra reserva nesse horário!", "danger")
+        flash("Conflito de horário com outra reserva.", "danger")
     else:
         conn.execute("""
             UPDATE reservas_sala
-            SET responsavel = ?, participantes = ?, data = ?, hora_inicio = ?, hora_fim = ?, motivo = ?, link_reuniao = ?
+            SET responsavel = ?, participantes = ?, data = ?, hora_inicio = ?, hora_fim = ?, motivo = ?, link_reuniao = ?,
+                cnpj_cliente = ?, nome_cliente = ?, tipo_cliente = ?, qtd_notebooks = ?
             WHERE id = ?
-        """, (responsavel, participantes, data_reserva, inicio, fim, motivo, link_reuniao, reserva_id))
+        """, (responsavel, participantes, data_reserva, inicio, fim, motivo, link_reuniao, cnpj_cliente, nome_cliente, tipo_cliente, qtd_notebooks, reserva_id))
         conn.commit()
         flash("Reserva atualizada.", "success")
     conn.close()
@@ -305,7 +344,6 @@ def agenda():
     """, (data_inicio.isoformat(), data_fim.isoformat())).fetchall()
     conn.close()
 
-    # Organizar: agenda_data[data_str][sala_nome] = [lista de reservas]
     agenda_data = {}
     for d in dias:
         d_str = d.isoformat()
@@ -487,6 +525,155 @@ def tirar_notebook_da_sala(nb_id):
         conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+
+# ──────────────── DASHBOARD ────────────────
+
+@app.route("/dashboard")
+def dashboard():
+    conn = get_db()
+    hoje = date.today()
+    primeiro_dia_mes = hoje.replace(day=1).isoformat()
+    hoje_str = hoje.isoformat()
+    ontem_str = (hoje - timedelta(days=1)).isoformat()
+
+    ativo_total = conn.execute("SELECT COUNT(*) FROM reservas_sala WHERE tipo_cliente = 'ativo'").fetchone()[0]
+    wo_total = conn.execute("SELECT COUNT(*) FROM reservas_sala WHERE tipo_cliente = 'wo'").fetchone()[0]
+    sem_tipo = conn.execute("SELECT COUNT(*) FROM reservas_sala WHERE tipo_cliente = '' OR tipo_cliente IS NULL").fetchone()[0]
+
+    meses_labels = []
+    ativo_por_mes = []
+    wo_por_mes = []
+    for i in range(2, -1, -1):
+        month = hoje.month - i
+        year = hoje.year
+        while month <= 0:
+            month += 12
+            year -= 1
+        mes_inicio = date(year, month, 1)
+        if month == 12:
+            mes_fim = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            mes_fim = date(year, month + 1, 1) - timedelta(days=1)
+        meses_labels.append(mes_inicio.strftime("%b/%Y"))
+        a = conn.execute("SELECT COUNT(*) FROM reservas_sala WHERE tipo_cliente = 'ativo' AND data >= ? AND data <= ?",
+                         (mes_inicio.isoformat(), mes_fim.isoformat())).fetchone()[0]
+        w = conn.execute("SELECT COUNT(*) FROM reservas_sala WHERE tipo_cliente = 'wo' AND data >= ? AND data <= ?",
+                         (mes_inicio.isoformat(), mes_fim.isoformat())).fetchone()[0]
+        ativo_por_mes.append(a)
+        wo_por_mes.append(w)
+
+    salas_stats = conn.execute("""
+        SELECT s.nome, COUNT(rs.id) as total
+        FROM salas s
+        LEFT JOIN reservas_sala rs ON rs.sala_id = s.id AND rs.data >= ?
+        GROUP BY s.id
+        ORDER BY total DESC
+    """, (primeiro_dia_mes,)).fetchall()
+    salas_nomes = [r["nome"] for r in salas_stats]
+    salas_totais = [r["total"] for r in salas_stats]
+
+    dias_semana_labels = ["Seg", "Ter", "Qua", "Qui", "Sex"]
+    todas = conn.execute("SELECT data FROM reservas_sala").fetchall()
+    contagem_dia = [0] * 7
+    for r in todas:
+        try:
+            dt = datetime.strptime(r["data"], "%Y-%m-%d").date()
+            contagem_dia[dt.weekday()] += 1
+        except ValueError:
+            pass
+    reunioes_por_dia = contagem_dia[:5]
+
+    top_solicitantes = conn.execute("""
+        SELECT responsavel, COUNT(*) as total
+        FROM reservas_sala
+        GROUP BY responsavel
+        ORDER BY total DESC
+        LIMIT 5
+    """).fetchall()
+    top_nomes = [r["responsavel"] for r in top_solicitantes]
+    top_totais = [r["total"] for r in top_solicitantes]
+
+    salas_totais_count = conn.execute("SELECT COUNT(*) FROM salas").fetchone()[0]
+    salas_disponiveis = max(salas_totais_count - 1, 0)
+    agora = datetime.now().strftime("%H:%M")
+    total_mes = conn.execute(
+        "SELECT COUNT(*) FROM reservas_sala WHERE data > ? OR (data = ? AND hora_inicio > ?)",
+        (hoje_str, hoje_str, agora)
+    ).fetchone()[0]
+    total_hoje = conn.execute("SELECT COUNT(*) FROM reservas_sala WHERE data = ?", (hoje_str,)).fetchone()[0]
+    reunioes_ontem = conn.execute("SELECT COUNT(*) FROM reservas_sala WHERE data = ?", (ontem_str,)).fetchone()[0]
+    total_hoje_diff = total_hoje - reunioes_ontem
+
+    proximas_7dias = conn.execute(
+        "SELECT COUNT(*) FROM reservas_sala WHERE data > ? AND data <= ?",
+        (hoje_str, (hoje + timedelta(days=7)).isoformat())
+    ).fetchone()[0]
+    semana_passada_7dias = conn.execute(
+        "SELECT COUNT(*) FROM reservas_sala WHERE data > ? AND data <= ?",
+        ((hoje - timedelta(days=7)).isoformat(), ontem_str)
+    ).fetchone()[0]
+    total_mes_diff = proximas_7dias - semana_passada_7dias
+    total_hoje_diff_text = ('+' if total_hoje_diff > 0 else '') + str(total_hoje_diff) + ' vs ontem'
+    total_mes_diff_text = ('+' if total_mes_diff > 0 else '') + str(total_mes_diff) + ' vs semana passada'
+    total_hoje_diff_color = 'success' if total_hoje_diff >= 0 else 'danger'
+    total_mes_diff_color = 'success' if total_mes_diff >= 0 else 'danger'
+
+    ativo_status_ok = ativo_total >= wo_total
+    wo_status_ok = wo_total <= ativo_total
+    salas_status_ok = salas_disponiveis > 0
+
+    status_ativo = 'OK' if ativo_status_ok else 'Atenção'
+    status_wo = 'OK' if wo_status_ok else 'Atenção'
+    status_salas = 'OK' if salas_status_ok else 'Lotado'
+    status_ativo_color = 'success' if ativo_status_ok else 'danger'
+    status_wo_color = 'success' if wo_status_ok else 'danger'
+    status_salas_color = 'success' if salas_status_ok else 'danger'
+
+    ultimos_clientes = conn.execute("""
+        SELECT nome_cliente, tipo_cliente
+        FROM reservas_sala
+        WHERE nome_cliente != '' AND nome_cliente IS NOT NULL
+        ORDER BY data DESC, hora_inicio DESC
+        LIMIT 6
+    """).fetchall()
+    clientes_nomes = [r["nome_cliente"] for r in ultimos_clientes]
+    clientes_tipos = [r["tipo_cliente"] if r["tipo_cliente"] else "" for r in ultimos_clientes]
+    clientes_totais = [1] * len(clientes_nomes)
+
+    conn.close()
+
+    return render_template("dashboard.html",
+                           ativo_total=ativo_total,
+                           wo_total=wo_total,
+                           sem_tipo=sem_tipo,
+                           meses_labels=meses_labels,
+                           ativo_por_mes=ativo_por_mes,
+                           wo_por_mes=wo_por_mes,
+                           salas_nomes=salas_nomes,
+                           salas_totais=salas_totais,
+                           dias_semana_labels=dias_semana_labels,
+                           reunioes_por_dia=reunioes_por_dia,
+                           top_nomes=top_nomes,
+                           top_totais=top_totais,
+                           clientes_nomes=clientes_nomes,
+                           clientes_totais=clientes_totais,
+                           clientes_tipos=clientes_tipos,
+                           salas_disponiveis=salas_disponiveis,
+                           total_mes=total_mes,
+                           total_hoje=total_hoje,
+                           total_hoje_diff=total_hoje_diff,
+                           total_mes_diff=total_mes_diff,
+                           total_hoje_diff_text=total_hoje_diff_text,
+                           total_mes_diff_text=total_mes_diff_text,
+                           total_hoje_diff_color=total_hoje_diff_color,
+                           total_mes_diff_color=total_mes_diff_color,
+                           status_ativo=status_ativo,
+                           status_wo=status_wo,
+                           status_salas=status_salas,
+                           status_ativo_color=status_ativo_color,
+                           status_wo_color=status_wo_color,
+                           status_salas_color=status_salas_color)
 
 
 # ──────────────── LIMPAR EXPIRADAS ────────────────

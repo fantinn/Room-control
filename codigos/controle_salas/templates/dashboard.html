@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Controle{% endblock %}
+
+{% block content %}
+<h5 class="mb-4"><i class="bi bi-bar-chart-line"></i> Dashboard</h5>
+
+<!-- KPIs -->
+<div class="row g-2 mb-3">
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="card text-center p-2 d-flex flex-column justify-content-between kpi-card">
+            <div>
+                <div style="font-size:1.82rem; font-weight:700; color:#1a73e8;">{{ total_hoje }}</div>
+                <small class="text-muted">Reuniões Hoje</small>
+            </div>
+            <div>
+                <div class="text-muted small mb-1">{{ total_hoje_diff_text }}</div>
+                <span class="badge bg-{{ total_hoje_diff_color }} kpi-badge">{{ 'OK' if total_hoje_diff >= 0 else 'Atenção' }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="card text-center p-2 d-flex flex-column justify-content-between kpi-card">
+            <div>
+                <div style="font-size:1.82rem; font-weight:700; color:#1a73e8;">{{ total_mes }}</div>
+                <small class="text-muted">Reuniões a Vir</small>
+            </div>
+            <div>
+                <div class="text-muted small mb-1">{{ total_mes_diff_text }}</div>
+                <span class="badge bg-{{ total_mes_diff_color }} kpi-badge">{{ 'OK' if total_mes_diff >= 0 else 'Atenção' }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="card text-center p-2 d-flex flex-column justify-content-between kpi-card">
+            <div>
+                <div style="font-size:1.82rem; font-weight:700; color:#1a73e8;">{{ salas_disponiveis }}</div>
+                <small class="text-muted">Salas Disponíveis</small>
+            </div>
+            <div>
+                <span class="badge bg-{{ status_salas_color }} kpi-badge">{{ status_salas }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="card text-center p-2 d-flex flex-column justify-content-between kpi-card">
+            <div>
+                <div style="font-size:1.82rem; font-weight:700; color:#1a73e8;">{{ ativo_total }}</div>
+                <small class="text-muted">Ativo</small>
+            </div>
+            <div>
+                <span class="badge bg-{{ status_ativo_color }} kpi-badge">{{ status_ativo }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="card text-center p-2 d-flex flex-column justify-content-between kpi-card">
+            <div>
+                <div style="font-size:1.82rem; font-weight:700; color:#e53935;">{{ wo_total }}</div>
+                <small class="text-muted">WO</small>
+            </div>
+            <div>
+                <span class="badge bg-{{ status_wo_color }} kpi-badge">{{ status_wo }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="card text-center p-2 d-flex flex-column justify-content-between kpi-card">
+            <div>
+                <div style="font-size:1.82rem; font-weight:700; color:#7e57c2;">{{ sem_tipo }}</div>
+                <small class="text-muted">Sem Tipo</small>
+            </div>
+            <div>
+                {% if sem_tipo > 0 %}
+                    <span class="badge bg-danger kpi-badge">Atenção</span>
+                {% else %}
+                    <span class="badge bg-success kpi-badge">OK</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gráficos -->
+<div class="row g-3 mb-3">
+    <!-- Reuniões por sala (barras horizontais) -->
+    <div class="col-12 col-md-6">
+        <div class="card p-2" style="height:100%;">
+            <h6 class="mb-2" style="font-size:0.95rem;"><i class="bi bi-door-open"></i> Reuniões por Sala (mês atual)</h6>
+            <div style="height:230px;"><canvas id="chartSalas"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Reuniões por dia da semana -->
+    <div class="col-12 col-md-6">
+        <div class="card p-2" style="height:100%;">
+            <h6 class="mb-2" style="font-size:0.95rem;"><i class="bi bi-calendar-week"></i> Reuniões por Dia da Semana</h6>
+            <div style="height:230px;"><canvas id="chartDiaSemana"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <!-- Ativo vs WO (pizza) -->
+    <div class="col-12 col-md-6 col-lg-4">
+        <div class="card p-2" style="height:100%;">
+            <h6 class="mb-2" style="font-size:0.95rem;"><i class="bi bi-pie-chart"></i> Ativo vs WO</h6>
+            <div class="d-flex align-items-center justify-content-center" style="height:200px;"><canvas id="chartAtivoWo" style="max-height:100%; width:auto;"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Ativo vs WO por mês (linha) -->
+    <div class="col-12 col-md-6 col-lg-8">
+        <div class="card p-2" style="height:100%;">
+            <h6 class="mb-2" style="font-size:0.95rem;"><i class="bi bi-graph-up"></i> Ativo vs WO — Últimos 3 meses</h6>
+            <div style="height:175px;"><canvas id="chartMensal"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <!-- Solicitantes -->
+    <div class="col-12 col-md-6">
+        <div class="card p-2" style="height:100%;">
+            <h6 class="mb-2" style="font-size:0.95rem;"><i class="bi bi-people"></i> Solicitantes</h6>
+            <div style="height:230px;"><canvas id="chartSolicitantes"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Top clientes -->
+    <div class="col-12 col-md-6">
+        <div class="card p-2" style="height:100%;">
+            <h6 class="mb-2" style="font-size:0.95rem;"><i class="bi bi-building"></i> Últimos Clientes</h6>
+            <div class="list-group list-group-flush" style="max-height:230px; overflow-y:auto;">
+                {% for cliente in clientes_nomes %}
+                <div class="list-group-item d-flex justify-content-between align-items-center py-2" style="border:none;">
+                    <span>{{ cliente }}</span>
+                    {% set tipo = clientes_tipos[loop.index0] %}
+                    {% if tipo == 'ativo' %}
+                        <span class="badge" style="background:#1a73e8; color:#fff;">Ativo</span>
+                    {% elif tipo == 'wo' %}
+                        <span class="badge" style="background:#e53935; color:#fff;">WO</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Indef.</span>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="list-group-item text-muted text-center">Nenhum cliente registrado ainda.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="dashboard-data">
+{
+    "ativo_total": {{ ativo_total }},
+    "wo_total": {{ wo_total }},
+    "sem_tipo": {{ sem_tipo }},
+    "meses_labels": {{ meses_labels|tojson|safe }},
+    "ativo_por_mes": {{ ativo_por_mes|tojson|safe }},
+    "wo_por_mes": {{ wo_por_mes|tojson|safe }},
+    "salas_nomes": {{ salas_nomes|tojson|safe }},
+    "salas_totais": {{ salas_totais|tojson|safe }},
+    "dias_semana_labels": {{ dias_semana_labels|tojson|safe }},
+    "reunioes_por_dia": {{ reunioes_por_dia|tojson|safe }},
+    "top_nomes": {{ top_nomes|tojson|safe }},
+    "top_totais": {{ top_totais|tojson|safe }},
+    "clientes_nomes": {{ clientes_nomes|tojson|safe }},
+    "clientes_totais": {{ clientes_totais|tojson|safe }},
+    "clientes_tipos": {{ clientes_tipos|tojson|safe }}
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const chartData = JSON.parse(document.getElementById('dashboard-data').textContent);
+const {
+    ativo_total,
+    wo_total,
+    sem_tipo,
+    meses_labels,
+    ativo_por_mes,
+    wo_por_mes,
+    salas_nomes,
+    salas_totais,
+    dias_semana_labels,
+    reunioes_por_dia,
+    top_nomes,
+    top_totais,
+    clientes_nomes,
+    clientes_totais,
+    clientes_tipos
+} = chartData;
+
+const CORES = ['#1a73e8', '#e53935', '#fb8c00', '#43a047', '#9c27b0', '#00acc1', '#1976d2', '#009688'];
+
+const pointLabelPlugin = {
+    id: 'pointLabelPlugin',
+    afterDatasetsDraw(chart) {
+        const { ctx, data } = chart;
+        ctx.save();
+        data.datasets.forEach((dataset, datasetIndex) => {
+            const meta = chart.getDatasetMeta(datasetIndex);
+            if (!meta.visible) return;
+            meta.data.forEach((point, index) => {
+                const value = dataset.data[index];
+                if (value === null || value === undefined) return;
+                const label = String(value);
+                ctx.fillStyle = dataset.borderColor || '#000';
+                ctx.font = '500 10px Inter, system-ui, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(label, point.x, point.y - 8);
+            });
+        });
+        ctx.restore();
+    }
+};
+
+// 1. Ativo vs WO (Doughnut)
+new Chart(document.getElementById('chartAtivoWo'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Ativo', 'WO'],
+        datasets: [{
+            data: [ativo_total, wo_total],
+            backgroundColor: ['#1a73e8', '#e53935'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } }
+    }
+});
+
+// 2. Ativo vs WO por mês
+const totalAtivoMes = ativo_por_mes.reduce((sum, value) => sum + value, 0);
+const totalWoMes = wo_por_mes.reduce((sum, value) => sum + value, 0);
+const totalAtivoWoMes = totalAtivoMes + totalWoMes;
+const ativoPct = totalAtivoWoMes ? ((totalAtivoMes / totalAtivoWoMes) * 100).toFixed(1) : '0.0';
+const woPct = totalAtivoWoMes ? ((totalWoMes / totalAtivoWoMes) * 100).toFixed(1) : '0.0';
+
+new Chart(document.getElementById('chartMensal'), {
+    type: 'line',
+    data: {
+        labels: meses_labels,
+        datasets: [
+            {
+                label: 'Ativo',
+                data: ativo_por_mes,
+                borderColor: '#1a73e8',
+                backgroundColor: 'rgba(26,115,232,0.08)',
+                borderWidth: 3,
+                pointBackgroundColor: '#1a73e8',
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 2,
+                tension: 0.1,
+                fill: false,
+                pointRadius: 5,
+                pointHoverRadius: 7
+            },
+            {
+                label: 'WO',
+                data: wo_por_mes,
+                borderColor: '#e53935',
+                backgroundColor: 'rgba(229,57,53,0.08)',
+                borderWidth: 3,
+                pointBackgroundColor: '#e53935',
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 2,
+                tension: 0.1,
+                fill: false,
+                pointRadius: 5,
+                pointHoverRadius: 7
+            }
+        ]
+    },
+    plugins: [pointLabelPlugin],
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'top' },
+            subtitle: {
+                display: true,
+                text: [`WO: ${totalWoMes} (${woPct}%)`, `Ativo: ${totalAtivoMes} (${ativoPct}%)`],
+                color: '#495057',
+                font: { size: 11, weight: '500' },
+                padding: { bottom: 8 }
+            },
+            tooltip: {
+                enabled: true,
+                mode: 'nearest',
+                intersect: false,
+                callbacks: {
+                    title(items) {
+                        return items[0]?.label || '';
+                    },
+                    label(context) {
+                        return `${context.dataset.label}: ${context.parsed.y}`;
+                    },
+                    footer(items) {
+                        const ativoItem = items.find(item => item.dataset.label === 'Ativo');
+                        const woItem = items.find(item => item.dataset.label === 'WO');
+                        const ativoValue = ativoItem ? ativoItem.parsed.y : 0;
+                        const woValue = woItem ? woItem.parsed.y : 0;
+                        return `Resumo: ${ativoValue} ativos, ${woValue} WO`;
+                    }
+                }
+            }
+        },
+        layout: { padding: { left: 4, right: 4, top: 2, bottom: 2 } },
+        scales: {
+            x: { type: 'category', grid: { display: false }, ticks: { autoSkip: true, maxRotation: 0, minRotation: 0 } },
+            y: { beginAtZero: true, grace: '2%', ticks: { stepSize: 1 } }
+        }
+    }
+});
+
+// 3. Reuniões por sala
+const salaColors = salas_nomes.map(() => '#1a73e8');
+const salaBorderColors = salas_nomes.map(() => '#174ea6');
+new Chart(document.getElementById('chartSalas'), {
+    type: 'bar',            
+    data: {
+        labels: salas_nomes,
+        datasets: [{ label: 'Reuniões', data: salas_totais, backgroundColor: salaColors, borderColor: salaBorderColors, borderWidth: 1, borderRadius: 8, barThickness: 22 }]
+    },
+    options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+});
+
+// 4. Reuniões por dia da semana
+const maxDayIndex = reunioes_por_dia.indexOf(Math.max(...reunioes_por_dia));
+const semanaBackground = dias_semana_labels.map((_, index) => index === maxDayIndex ? '#e53935' : '#1a73e8');
+const averageDay = Math.ceil(reunioes_por_dia.reduce((sum, value) => sum + value, 0) / reunioes_por_dia.length);
+new Chart(document.getElementById('chartDiaSemana'), {
+    type: 'bar',
+    data: {
+        labels: dias_semana_labels,
+        datasets: [{ label: 'Reuniões', data: reunioes_por_dia, backgroundColor: semanaBackground, borderRadius: 8, barThickness: 22 }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: false },
+            subtitle: {
+                display: true,
+                text: `Média diária: ${averageDay} reuniões`,
+                color: '#495057',
+                font: { size: 11, weight: '500' },
+                padding: { bottom: 8 }
+            }
+        },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+});
+
+// 5. Top solicitantes
+new Chart(document.getElementById('chartSolicitantes'), {
+    type: 'bar',
+    data: {
+        labels: top_nomes,
+        datasets: [{ label: 'Reuniões', data: top_totais, backgroundColor: '#1a73e8', borderRadius: 8, barThickness: 22 }]
+    },
+    options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+});
+
+</script>
+{% endblock %}

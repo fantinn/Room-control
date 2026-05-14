@@ -2,6 +2,84 @@
 {% block title %}Agenda - Controle{% endblock %}
 
 {% block content %}
+<style>
+    .agenda-reserva {
+        position: relative;
+        background: linear-gradient(135deg, #1a73e8, #0d47a1);
+        color: #fff;
+        border-radius: 10px;
+        padding: 10px;
+        box-shadow: none;
+    }
+    .agenda-reserva .text-muted {
+        color: rgba(255,255,255,0.8) !important;
+    }
+    .agenda-reserva a {
+        color: rgba(255,255,255,0.95) !important;
+        text-decoration: underline;
+    }
+    .agenda-reserva button.btn-link {
+        color: rgba(255,255,255,0.9) !important;
+    }
+    .agenda-edit-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.15);
+        color: #fff;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+    .agenda-edit-btn:hover {
+        background: rgba(255,255,255,0.25);
+    }
+    .nb-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .nb-label {
+        font-size: 0.8rem;
+        color: #666;
+        font-weight: 500;
+    }
+    .nb-btn {
+        cursor: pointer;
+        padding: 3px 12px;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        border: 1px solid #ccc;
+        background: #f8f9fa;
+        color: #555;
+        user-select: none;
+        transition: all 0.15s;
+        font-weight: 600;
+    }
+    .nb-btn:hover { background: #e2e6ea; }
+    .nb-btn.active-nb {
+        background: #7b1fa2;
+        color: #fff;
+        border-color: #7b1fa2;
+    }
+    body.dark-mode .nb-label { color: rgba(255,255,255,0.7) !important; }
+    body.dark-mode .nb-btn {
+        background: #243050 !important;
+        border-color: rgba(255,255,255,0.18) !important;
+        color: rgba(255,255,255,0.82) !important;
+    }
+    body.dark-mode .nb-btn.active-nb {
+        background: #7b1fa2 !important;
+        border-color: #7b1fa2 !important;
+        color: #fff !important;
+    }
+</style>
 <div class="d-flex align-items-center justify-content-between mb-3">
     <h5 class="mb-0"><i class="bi bi-calendar-week"></i> Agenda Semanal</h5>
     <div class="d-flex gap-2 align-items-center">
@@ -36,15 +114,14 @@
                             data-sala-id="{{ s.id }}" data-sala-nome="{{ s.nome }}" data-date="{{ d_str }}">
                             {% if agenda_data[d_str][s.nome] %}
                                 {% for r in agenda_data[d_str][s.nome] %}
-                                <div class="agenda-reserva mb-1">
+                                <div class="agenda-reserva mb-1" data-reserva-id="{{ r.id }}" data-responsavel="{{ r.responsavel }}" data-participantes="{{ r.participantes or '' }}" data-motivo="{{ r.motivo or '' }}" data-link="{{ r.link_reuniao or '' }}" data-hora-inicio="{{ r.hora_inicio }}" data-date="{{ d_str }}" data-nome-cliente="{{ r.nome_cliente or '' }}" data-cnpj-cliente="{{ r.cnpj_cliente or '' }}" data-tipo-cliente="{{ r.tipo_cliente or '' }}" data-qtd-notebooks="{{ r.qtd_notebooks or 0 }}">
+                                    <button type="button" class="agenda-edit-btn" title="Editar"><i class="bi bi-three-dots"></i></button>
                                     <div class="fw-bold">{{ r.hora_inicio }}-{{ r.hora_fim }}</div>
                                     <div>{{ r.responsavel }}</div>
                                     {% if r.participantes %}<div class="text-muted" style="font-size:0.7rem;">Participantes: {{ r.participantes }}</div>{% endif %}
                                     {% if r.motivo %}<div class="text-muted" style="font-size:0.7rem;">{{ r.motivo }}</div>{% endif %}
                                     {% if r.link_reuniao %}<a href="{{ r.link_reuniao }}" target="_blank" style="font-size:0.65rem;"><i class="bi bi-camera-video"></i> Link</a>{% endif %}
-                                    <form method="POST" action="{{ url_for('cancelar_reserva', reserva_id=r.id) }}" class="d-inline">
-                                        <button class="btn btn-link text-danger p-0" style="font-size:0.65rem;" title="Cancelar"><i class="bi bi-trash"></i></button>
-                                    </form>
+                                    {% if r.qtd_notebooks and r.qtd_notebooks > 0 %}<div style="font-size:0.65rem; opacity:0.85;"><i class="bi bi-laptop"></i> {{ r.qtd_notebooks }} notebook{% if r.qtd_notebooks > 1 %}s{% endif %}</div>{% endif %}
                                 </div>
                                 {% endfor %}
                             {% else %}
@@ -62,38 +139,122 @@
 
 <!-- Modal para reservar via agenda -->
 <div class="modal fade" id="agendaReservar" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-md">
         <div class="modal-content">
             <form method="POST" id="agendaReservarForm">
-                <div class="modal-body p-4">
-                    <h5 class="mb-3">Reservar <span id="agendaSalaNome"></span></h5>
-                    <p class="text-muted mb-1">Data: <strong id="agendaDataLabel"></strong></p>
-                    <p class="text-muted">Duração: 1h30min</p>
-                    <input type="hidden" name="data" id="agendaDataInput">
+                <div class="modal-body p-3">
+                    <h5 class="mb-1">Reservar <span id="agendaSalaNome"></span></h5>
+                    <small class="text-muted d-block mb-3">Duração: 1h30min</small>
+                    <div class="mb-2">
+                        <input type="text" name="responsavel" class="form-control form-control-sm" placeholder="Solicitante *" required>
+                    </div>
+                    <div class="mb-2">
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="agendaData" class="form-control form-control-sm agenda-data-input" placeholder="DD/MM/AAAA" autocomplete="off" required style="max-width:145px;" maxlength="10">
+                            <input type="text" id="agendaHora" class="form-control form-control-sm agenda-hora-input" placeholder="00:00" autocomplete="off" required style="max-width:80px;" maxlength="5">
+                            <input type="hidden" id="agendaDataHora" name="data_hora">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" name="participantes" class="form-control form-control-sm" placeholder="Participantes">
+                    </div>
+                    <div class="mb-2">
+                        <input type="url" name="link_reuniao" class="form-control form-control-sm" placeholder="Link Teams (opcional)">
+                    </div>
+                    <hr class="my-2">
+                    <small class="text-muted"><i class="bi bi-building"></i> Cliente (opcional)</small>
+                    <div class="row g-2 mt-1 mb-2">
+                        <div class="col-7">
+                            <input type="text" name="nome_cliente" class="form-control form-control-sm" placeholder="Nome cliente">
+                        </div>
+                        <div class="col-5">
+                            <input type="text" name="cnpj_cliente" class="form-control form-control-sm" placeholder="CNPJ">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <input type="hidden" name="tipo_cliente" value="" id="agendaTipoCliente">
+                        <div class="tipo-toggle" data-input="agendaTipoCliente" data-value="">
+                            <span class="tipo-label">Tipo:</span>
+                            <span class="tipo-btn" data-val="ativo">Ativo</span>
+                            <span class="tipo-btn" data-val="wo">WO</span>
+                        </div>
+                    </div>
                     <div class="mb-3">
-                        <label class="form-label">Solicitante da sala *</label>
-                        <input type="text" name="responsavel" class="form-control form-control-sm" placeholder="Ex: Gabriel" required>
+                        <input type="hidden" name="qtd_notebooks" value="0" id="agendaQtdNotebooks">
+                        <div class="nb-toggle" data-input="agendaQtdNotebooks">
+                            <span class="nb-label"><i class="bi bi-laptop"></i> Notebooks:</span>
+                            <span class="nb-btn" data-val="1">1</span>
+                            <span class="nb-btn" data-val="2">2</span>
+                            <span class="nb-btn" data-val="3">3+</span>
+                        </div>
                     </div>
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" name="dia_inteiro" value="1" class="form-check-input" id="agendaDiaInteiro" onchange="document.getElementById('agendaHoraBloco').style.display = this.checked ? 'none' : 'block';">
-                        <label class="form-check-label" for="agendaDiaInteiro">Dia inteiro</label>
-                    </div>
-                    <div class="mb-3" id="agendaHoraBloco">
-                        <label class="form-label">Hora de início *</label>
-                        <input type="time" name="hora_inicio" class="form-control form-control-sm" value="09:00">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Motivo</label>
-                        <input type="text" name="motivo" class="form-control form-control-sm" placeholder="Reunião de equipe, etc.">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label"><i class="bi bi-camera-video"></i> Link da reunião (Teams)</label>
-                        <input type="url" name="link_reuniao" class="form-control form-control-sm" placeholder="Cole o link do Teams aqui">
-                    </div>
-                    <button class="btn btn-success w-100 mb-2">Reservar</button>
-                    <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-reservar btn-sm w-100 mb-1">Reservar</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" data-bs-dismiss="modal">Cancelar</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal editar reserva via agenda -->
+<div class="modal fade" id="agendaEditar" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-md">
+        <div class="modal-content">
+            <form method="POST" id="agendaEditarForm">
+                <div class="modal-body p-3">
+                    <h5 class="mb-1">Editar Reserva</h5>
+                    <div class="mb-2">
+                        <input type="text" name="responsavel" id="agendaEditarResponsavel" class="form-control form-control-sm" placeholder="Solicitante *" required>
+                    </div>
+                    <div class="mb-2">
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="agendaEditarData" class="form-control form-control-sm agenda-edit-data-input" placeholder="DD/MM/AAAA" autocomplete="off" required style="max-width:145px;" maxlength="10">
+                            <input type="text" id="agendaEditarHora" class="form-control form-control-sm agenda-edit-hora-input" placeholder="00:00" autocomplete="off" required style="max-width:80px;" maxlength="5">
+                            <input type="hidden" id="agendaEditarDataHora" name="data_hora"><input type="text" id="agendaEditarDataHora" name="data_hora" class="form-control form-control-sm datahora-picker" placeholder="Data e hora" autocomplete="off" required>
+                            <span class="input-group-text datahora-open" data-target="#agendaEditarDataHora">
+                                <i class="bi bi-calendar-event" style="color:#0d47a1;"></i>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" name="participantes" id="agendaEditarParticipantes" class="form-control form-control-sm" placeholder="Participantes">
+                    </div>
+                    <div class="mb-2">
+                        <input type="url" name="link_reuniao" id="agendaEditarLink" class="form-control form-control-sm" placeholder="Link Teams (opcional)">
+                    </div>
+                    <hr class="my-2">
+                    <small class="text-muted"><i class="bi bi-building"></i> Cliente (opcional)</small>
+                    <div class="row g-2 mt-1 mb-2">
+                        <div class="col-7">
+                            <input type="text" name="nome_cliente" id="agendaEditarNomeCliente" class="form-control form-control-sm" placeholder="Nome cliente">
+                        </div>
+                        <div class="col-5">
+                            <input type="text" name="cnpj_cliente" id="agendaEditarCnpjCliente" class="form-control form-control-sm" placeholder="CNPJ">
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <input type="hidden" name="tipo_cliente" value="" id="agendaEditarTipoCliente">
+                        <div class="tipo-toggle" data-input="agendaEditarTipoCliente" data-value="">
+                            <span class="tipo-label">Tipo:</span>
+                            <span class="tipo-btn" data-val="ativo">Ativo</span>
+                            <span class="tipo-btn" data-val="wo">WO</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <input type="hidden" name="qtd_notebooks" value="0" id="agendaEditarQtdNotebooks">
+                        <div class="nb-toggle" data-input="agendaEditarQtdNotebooks">
+                            <span class="nb-label"><i class="bi bi-laptop"></i> Notebooks:</span>
+                            <span class="nb-btn" data-val="1">1</span>
+                            <span class="nb-btn" data-val="2">2</span>
+                            <span class="nb-btn" data-val="3">3+</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-reservar btn-sm w-100 mb-1">Salvar</button>
+                    <button type="submit" class="btn btn-danger btn-sm w-100 mb-1" id="agendaExcluirBtn" form="agendaExcluirForm">Excluir</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </form>
+            <form method="POST" id="agendaExcluirForm" onsubmit="return confirm('Tem certeza que deseja excluir esta reserva?');"></form>
         </div>
     </div>
 </div>
@@ -101,6 +262,21 @@
 
 {% block scripts %}
 <script>
+function resetTipoToggle(toggleSelector, value) {
+    const toggle = document.querySelector(toggleSelector);
+    if (!toggle) return;
+    const inputId = toggle.dataset.input;
+    const input = document.getElementById(inputId);
+    toggle.dataset.value = value;
+    toggle.querySelectorAll('.tipo-btn').forEach(btn => {
+        btn.classList.remove('active-ativo', 'active-wo');
+        if (value && btn.dataset.val === value) {
+            btn.classList.add(value === 'ativo' ? 'active-ativo' : 'active-wo');
+        }
+    });
+    if (input) input.value = value || '';
+}
+
 // Click on agenda cell to open reservation modal
 document.querySelectorAll('.agenda-cell').forEach(cell => {
     cell.addEventListener('click', e => {
@@ -108,17 +284,163 @@ document.querySelectorAll('.agenda-cell').forEach(cell => {
         const salaId = cell.dataset.salaId;
         const salaNome = cell.dataset.salaNome;
         const dateStr = cell.dataset.date;
-        const parts = dateStr.split('-');
-        const dateLabel = parts[2] + '/' + parts[1];
+        const [year, month, day] = dateStr.split('-');
+        const dateHora = `${day}/${month}/${year} 09:00`;
 
-        document.getElementById('agendaSalaNome').textContent = salaNome;
-        document.getElementById('agendaDataLabel').textContent = dateLabel;
-        document.getElementById('agendaDataInput').value = dateStr;
+        const modal = document.getElementById('agendaReservar');
+        modal.querySelector('h5 span').textContent = salaNome;
+        document.getElementById('agendaData').value = `${day}/${month}/${year}`;
+        document.getElementById('agendaHora').value = '09:00';
         document.getElementById('agendaReservarForm').action = '/reservar/' + salaId;
-        document.getElementById('agendaDiaInteiro').checked = false;
-        document.getElementById('agendaHoraBloco').style.display = 'block';
+        document.querySelector('#agendaReservar input[name="responsavel"]').value = '';
+        document.querySelector('#agendaReservar input[name="participantes"]').value = '';
+        document.querySelector('#agendaReservar input[name="link_reuniao"]').value = '';
+        document.querySelector('#agendaReservar input[name="nome_cliente"]').value = '';
+        document.querySelector('#agendaReservar input[name="cnpj_cliente"]').value = '';
+        resetTipoToggle('#agendaReservar .tipo-toggle', '');
+        resetNbToggle('agendaQtdNotebooks', '0');
 
-        new bootstrap.Modal(document.getElementById('agendaReservar')).show();
+        new bootstrap.Modal(modal).show();
+    });
+});
+
+document.querySelectorAll('.agenda-edit-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const card = btn.closest('.agenda-reserva');
+        if (!card) return;
+
+        const reservaId = card.dataset.reservaId;
+        const responsavel = card.dataset.responsavel;
+        const participantes = card.dataset.participantes;
+        const motivo = card.dataset.motivo;
+        const link = card.dataset.link;
+        const nomeCliente = card.dataset.nomeCliente;
+        const cnpjCliente = card.dataset.cnpjCliente;
+        const tipoCliente = card.dataset.tipoCliente;
+        const horaInicio = card.dataset.horaInicio;
+        const dateStr = card.dataset.date;
+        const [year, month, day] = dateStr.split('-');
+        const dateHora = `${day}/${month}/${year} ${horaInicio}`;
+
+        const form = document.getElementById('agendaEditarForm');
+        const excluirForm = document.getElementById('agendaExcluirForm');
+        form.action = `/reserva/${reservaId}/editar`;
+        excluirForm.action = `/reserva/${reservaId}/cancelar`;
+        document.getElementById('agendaEditarResponsavel').value = responsavel;
+        document.getElementById('agendaEditarData').value = `${day}/${month}/${year}`;
+        document.getElementById('agendaEditarHora').value = horaInicio;
+        document.getElementById('agendaEditarParticipantes').value = participantes;
+        document.getElementById('agendaEditarLink').value = link;
+        document.getElementById('agendaEditarNomeCliente').value = nomeCliente;
+        document.getElementById('agendaEditarCnpjCliente').value = cnpjCliente;
+        resetTipoToggle('#agendaEditar .tipo-toggle', tipoCliente);
+        const qtdNb = card.dataset.qtdNotebooks || '0';
+        resetNbToggle('agendaEditarQtdNotebooks', qtdNb);
+
+        new bootstrap.Modal(document.getElementById('agendaEditar')).show();
+    });
+});
+
+
+
+document.querySelectorAll('.tipo-toggle').forEach(toggle => {
+    const inputId = toggle.dataset.input;
+    const input = document.getElementById(inputId);
+    const btns = toggle.querySelectorAll('.tipo-btn');
+    const currentVal = toggle.dataset.value;
+
+    function setActive(val) {
+        btns.forEach(b => {
+            b.classList.remove('active-ativo', 'active-wo');
+            if (b.dataset.val === val) {
+                b.classList.add(val === 'ativo' ? 'active-ativo' : 'active-wo');
+            }
+        });
+        if (input) input.value = val;
+    }
+
+    if (currentVal) setActive(currentVal);
+
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const val = btn.dataset.val;
+            if (input && input.value === val) {
+                input.value = '';
+                btns.forEach(b => b.classList.remove('active-ativo', 'active-wo'));
+            } else {
+                setActive(val);
+            }
+        });
+    });
+});
+// ──────────────── TOGGLE NOTEBOOKS ────────────────
+function initNbToggles() {
+    document.querySelectorAll('.nb-toggle').forEach(toggle => {
+        const inputId = toggle.dataset.input;
+        const input = document.getElementById(inputId);
+        const btns = toggle.querySelectorAll('.nb-btn');
+
+        btns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const val = btn.dataset.val;
+                const current = input ? input.value : '0';
+                if (current === val) {
+                    // deselect
+                    btns.forEach(b => b.classList.remove('active-nb'));
+                    if (input) input.value = '0';
+                } else {
+                    btns.forEach(b => b.classList.remove('active-nb'));
+                    btn.classList.add('active-nb');
+                    if (input) input.value = val;
+                }
+            });
+        });
+    });
+}
+initNbToggles();
+
+function resetNbToggle(inputId, val) {
+    const input = document.getElementById(inputId);
+    const toggle = document.querySelector(`.nb-toggle[data-input="${inputId}"]`);
+    if (!toggle) return;
+    const btns = toggle.querySelectorAll('.nb-btn');
+    btns.forEach(b => {
+        b.classList.remove('active-nb');
+        if (val && val !== '0' && b.dataset.val === String(val)) b.classList.add('active-nb');
+    });
+    if (input) input.value = val || '0';
+}
+
+// Formata data
+document.querySelectorAll('.agenda-data-input, .agenda-edit-data-input').forEach(input => {
+    input.addEventListener('input', () => {
+        let v = input.value.replace(/\D/g, '');
+        if (v.length >= 3) v = v.slice(0,2) + '/' + v.slice(2);
+        if (v.length >= 6) v = v.slice(0,5) + '/' + v.slice(5,9);
+        input.value = v;
+    });
+});
+
+// Formata hora
+document.querySelectorAll('.agenda-hora-input, .agenda-edit-hora-input').forEach(input => {
+    input.addEventListener('input', () => {
+        let v = input.value.replace(/\D/g, '');
+        if (v.length >= 3) v = v.slice(0,2) + ':' + v.slice(2,4);
+        input.value = v;
+    });
+});
+
+// Combina data+hora no hidden antes de enviar
+document.querySelectorAll('#agendaReservarForm, #agendaEditarForm').forEach(form => {
+    form.addEventListener('submit', () => {
+        const isEdit = form.id === 'agendaEditarForm';
+        const dataEl = document.getElementById(isEdit ? 'agendaEditarData' : 'agendaData');
+        const horaEl = document.getElementById(isEdit ? 'agendaEditarHora' : 'agendaHora');
+        const hidden = document.getElementById(isEdit ? 'agendaEditarDataHora' : 'agendaDataHora');
+        if (dataEl && horaEl && hidden) {
+            hidden.value = dataEl.value + ' ' + horaEl.value;
+        }
     });
 });
 </script>
